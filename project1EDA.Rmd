@@ -1,0 +1,510 @@
+---
+title: "H1-B DATASET EDA"
+author: "Raj Joshi, Student Number: 22627911"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+## H1-B DATASET OVERVIEW 
+
+In recent new, the H1-B visas are of hot topic due to President Trump making reforms in the USICS(Immigration) Department. Hence, there are news that the **H1-B visas** are granted to few people only with more scrutinized checks, such as people applying for H1-B visas should have minimum salary of **100K USD** , etc.
+
+Libraries and dataset used for the EDA
+#ACTIVATE LIBRARIES
+```{r}
+library(dplyr)
+library(ggplot2)
+library(data.table)
+library(plotrix)
+library(tools4uplift)
+library(sm)
+library(gridExtra)
+io<-read.csv("C:/Users/Acer Laptop/Downloads/H-1B_Disclosure_Data_FY17.csv") 
+
+```
+
+
+
+
+
+```{r}
+head(io,5)
+```
+
+
+
+## Generating Hypothesis
+
+Since the news were of more scrutinized checks for H1-B visas. Lets list down some of the hypothesis regarding the data
+
+* Are the visas less granted recently?
+
+* Is the salary of people greater than 100K USD?
+
+* Which company has applied most petitions for H1-B?
+
+* Which Jobs have more successful chance of getting H1-B visa?
+
+* Which state/city has most successful petitions?
+
+
+
+
+
+
+## Getting the data type and metadata of each column in the dataframe
+```{r}
+str(io)
+```
+
+
+## Summary of data
+
+
+
+
+```{r}
+summary(io)
+```
+
+
+
+
+
+## Cleaning the data
+
+Count the null values in each column. 
+
+```{r pressure, echo=FALSE}
+lapply(io,function(x) { length(which(is.na(x)))})
+
+```
+
+
+## UNIQUE VALUES COUNT
+
+
+
+#### Count unique values in each column
+
+
+```{r}
+sapply(io, function(x) length(unique(x)))
+
+```
+
+
+
+#### NULL VALUES PERCENTAGE
+
+
+
+Calculate the percentage of null values in each column
+```{r}
+Null_Counter <- apply(io, 2, function(x) length(which(x == "" | is.na(x) | x == "NA" | x == "-999" | x == "0"))/length(x))
+round(Null_Counter/100,digits=2)
+
+```
+
+
+
+
+#### COLUMN NAMES
+
+
+```{r}
+names(io)
+```
+
+
+
+
+#### PLOTS
+
+
+
+
+
+Most number of petittions as per Case status.
+
+* Here we can see that our data has most petitions as "Certified".
+
+It means that our data says most cases were certified(approved).
+```{r}
+
+io %>% filter(!is.na(CASE_STATUS)) %>% group_by(CASE_STATUS) %>% 
+  summarise(nr = length(CASE_NUMBER)) %>% ungroup() -> dc
+
+ggplot(data = dc, aes(x = reorder(CASE_STATUS,nr), y = nr/1000)) +  
+  geom_bar(stat="identity", fill="light blue", colour="black") + theme_bw(base_size = 10)  +
+  labs(title="", x ="Case status", y = "Number of applications (thousands)")
+```
+
+
+
+
+
+#### Further digging as per time
+
+
+
+Case Status Counts as per years
+Here we can see that most people got their H1-B visa certified in the year 2016-2018. There are no visas certified prior to 2016 as per the data. Hence, we can say that, there is no accurate data of people having thir visas approved prior to 2016.  
+
+By this graph we can say that, more cases were "certified" during 2016-2018.
+
+
+
+
+```{r}
+io$EMPLOYMENT_START_DATE<-as.Date(io$EMPLOYMENT_START_DATE, origin = "1899-12-30")
+io$YEAR <- format(as.Date(io$EMPLOYMENT_START_DATE, "%Y-%m-%d"), "%Y")
+
+
+io %>% filter(!is.na(CASE_STATUS)) %>%  filter(!is.na(YEAR)) %>%
+  group_by(CASE_STATUS,YEAR) %>% summarise(nr = length(CASE_STATUS)) %>% ungroup() -> dcy
+
+ggplot(data = dcy, aes(x = YEAR, y = nr/1000, colour = CASE_STATUS,group=CASE_STATUS)) +  
+  geom_line() + geom_point() + theme_bw() + theme(legend.position="right") +
+  labs(x="Year", y="Applications (thousands)", colour="Case status", 
+       title="Case status (per year)")
+```
+
+
+#### Most applications as per occupations
+
+
+
+
+Most Applications were made by Software Developers and also in the period 2016-2018.
+
+```{r}
+io %>% filter(!is.na(SOC_NAME)) %>% group_by(SOC_NAME) %>% summarise(nr = length(SOC_NAME)) %>% 
+  top_n(n=100) %>% arrange(-nr) %>% ungroup() -> ds
+```
+
+```{r}
+io %>% filter(!is.na(SOC_NAME)) %>%  filter(!is.na(YEAR)) %>%
+  filter(SOC_NAME %in% ds[1:10,]$SOC_NAME) %>%
+  group_by(SOC_NAME,YEAR) %>% summarise(nr = length(SOC_NAME)) %>% ungroup() -> dsy
+ggplot(data = dsy, aes(x = YEAR, y = nr/1000, colour = SOC_NAME,group=SOC_NAME)) +  
+  geom_line() + geom_point() + theme_bw() + theme(legend.position="right") +
+  labs(x="Year", y="Applications (thousands)", colour="Occupational code", 
+       title="Occupational code (per year)")
+```
+
+```{r}
+
+ggplot(dsy) + geom_bar(aes(x=reorder(SOC_NAME,nr),fill=YEAR))+coord_flip()
+```
+
+
+
+
+
+#### TOP 20 Visa Applications corresponding to job title
+
+
+
+
+Technical/Coding jobs have more applications with respect to other job titles
+
+```{r}
+io %>% group_by(JOB_TITLE) %>% summarise(nr = length(CASE_NUMBER)) %>% 
+  top_n(n=20) %>% arrange(-nr) %>% ungroup() -> dj
+```
+
+```{r}
+ggplot(data = dj, aes(x = reorder(JOB_TITLE,nr), y = nr)) +  
+  geom_bar(stat="identity", fill="light blue", colour="black") +
+  coord_flip() + theme_bw(base_size = 10)  +
+  labs(title="", x ="Job title (top 20)", y = "Number of applications")
+```
+
+
+
+
+#### Case status and job applications
+
+
+
+Coding and technical jobs have same amount of visa approval/rejections.
+```{r}
+#io %>% group_by(JOB_TITLE,CASE_STATUS) %>% summarise(nr = length(CASE_NUMBER)) %>% top_n(n=20) %>% arrange(-nr) %>% ungroup() -> djst
+
+head(io %>%
+  filter(CASE_STATUS %in% c("CERTIFIED")) %>%
+  group_by(JOB_TITLE, CASE_STATUS) %>%
+  summarise(nr=length(CASE_NUMBER)) %>%top_n(n=10) %>%arrange(-nr),10)->djstCERT
+
+head(io %>%
+  filter(CASE_STATUS %in% c("DENIED")) %>%
+  group_by(JOB_TITLE, CASE_STATUS) %>%
+  summarise(nr=length(CASE_NUMBER)) %>%top_n(n=10) %>%arrange(-nr),10)->djstDENI
+
+
+head(io %>%
+  filter(CASE_STATUS %in% c("WITHDRAWN")) %>%
+  group_by(JOB_TITLE, CASE_STATUS) %>%
+  summarise(nr=length(CASE_NUMBER)) %>%top_n(n=10) %>%arrange(-nr),10)->djstwithd
+
+head(io %>%
+  filter(CASE_STATUS %in% c("CERTIFIED-WITHDRAWN")) %>%
+  group_by(JOB_TITLE, CASE_STATUS) %>%
+  summarise(nr=length(CASE_NUMBER)) %>%top_n(n=10) %>%arrange(-nr),10)->djstcertwith
+
+```
+
+```{r}
+ggplot(data = djstCERT, aes(x = reorder(JOB_TITLE,nr), y = nr)) +  
+  geom_bar(stat="identity", fill="light blue", colour="black") +
+  coord_flip() + theme_bw(base_size = 10)  +
+  labs(title="MOST H1-B CERTIFIED JOBS", x ="Job title", y = "CERTIFIED")
+```
+```{r}
+ggplot(data = djstDENI, aes(x = reorder(JOB_TITLE,nr), y = nr)) +  
+  geom_bar(stat="identity", fill="light blue", colour="black") +
+  coord_flip() + theme_bw(base_size = 10)  +
+  labs(title="MOST H1-B DENIED JOBS", x ="Job title", y = "DENIED")
+```
+
+
+
+
+#### YEAR WISE Applications
+
+
+
+
+```{r}
+io %>% filter(!is.na(YEAR)) %>% group_by(YEAR) %>% summarise(nr = length(CASE_NUMBER)) %>% ungroup() -> dy
+
+ggplot(data = dy, aes(x = reorder(YEAR,nr), y = nr/1000)) +  
+  geom_bar(stat="identity", fill="light blue", colour="black") +
+  theme_bw(base_size = 10)  +
+  labs(title="", x ="Year", y = "Number of applications (thousands)")
+```
+
+
+
+#### JOB APPLiCATION Wage Levelss
+
+
+
+```{r}
+io %>% filter(!is.na(PW_WAGE_LEVEL)) %>% group_by(FULL_TIME_POSITION) %>% summarise(nr = length(CASE_NUMBER)) %>% ungroup() -> dp
+
+lbls = c("WAGE LEVEL1","WAGE LEVEL2","WAGE LEVEL3")
+
+pcts = round(dp$nr / sum(dp$nr) * 100,0)
+
+lbls = paste(lbls, pcts)
+
+lbls = paste(lbls,"%", sep="")
+
+cols = c("Light blue", "black")
+
+pie3D(x=dp$nr, labels=lbls, col = cols, explode=0, main = "WAGE LEVELS")
+```
+
+
+
+#### TOP 20 EMPLOYERS
+
+
+
+Infosys, Tata Consultancy Services, Capgemini are the companies with most applications for H1-B visas.
+
+```{r}
+io %>% group_by(EMPLOYER_NAME) %>% summarise(nr = length(CASE_NUMBER)) %>% top_n(n=20) %>% ungroup() -> de
+```
+
+```{r}
+ggplot(data = de, aes(x = reorder(EMPLOYER_NAME,nr), y = nr/1000)) +  
+  geom_bar(stat="identity", fill="lightblue", colour="black") +
+  coord_flip() + theme_bw(base_size = 10)  +
+  labs(title="", x ="Employer name (top 20)", y = "Number of applications (thousands)")
+```
+
+
+
+#### AVERAGE SALARY OF CASE STATUS=="CERTIFIED"
+
+
+
+The average salary of people whose H1-B has been approved is around 80K USD.
+
+
+```{r}
+io %>% filter(!is.na(PREVAILING_WAGE)) %>% filter(PREVAILING_WAGE>0) %>% filter(!is.na(YEAR)) %>% 
+  filter(CASE_STATUS == "CERTIFIED") %>%
+  group_by(YEAR) %>% summarise(avg = mean(PREVAILING_WAGE)) %>% ungroup() -> dw
+ggplot(data = dw, aes(x = YEAR, y = avg)) +  
+  geom_bar(stat="identity", fill="light blue", colour="black") +
+  theme_bw(base_size = 10)  +
+  labs(title="", x ="Year", y = "Average prevailing salary ($)", main="Prevailing wages (2011-2016)")
+```
+
+
+
+#### JOB NAME GROUPED
+
+
+
+Making a graph with job titles whose visa was approved with respect to years.
+
+Senior Software Engineer was the highest paid and H1-B approved job title.
+
+```{r}
+io %>% filter(!is.na(PREVAILING_WAGE)) %>% filter(PREVAILING_WAGE>0) %>% filter(!is.na(YEAR)) %>%
+  filter(CASE_STATUS == "CERTIFIED") %>% filter(JOB_TITLE %in% dj$JOB_TITLE[1:10]) %>%
+  group_by(JOB_TITLE,YEAR) %>% summarise(avg = mean(PREVAILING_WAGE)) %>% ungroup() -> dwj
+
+ggplot(data = dwj, aes(x = YEAR, y = avg/1000, colour = JOB_TITLE,group=JOB_TITLE)) +       
+  geom_line() + geom_point() + theme_bw() + theme(legend.position="right") +
+  labs(x="Year", y="Average salary (thousands USD)", colour="Job title", 
+       title="Prevailing salaries (per year and job title)",
+       subtitle="Only CERTIFIED applications included")
+```
+
+
+
+#### Density plot by years
+
+
+
+Applications with full time role.
+
+```{r}
+ggplot(data = subset(io, !is.na(io$FULL_TIME_POSITION)),
+        aes(x = FULL_TIME_POSITION, y = (..count..)*100/3002458, fill = FULL_TIME_POSITION)) + 
+        geom_bar() +
+        labs(y = "Petitions Made(in percentage)") +
+        theme(legend.position = "none") +
+        scale_y_continuous(breaks = seq(0,100,10))
+```
+
+
+
+#### Application by State
+
+
+
+
+California and Texas are the only state with most visa applications.
+
+```{r}
+io$EMPLOYER_STATE2 <- factor(io$EMPLOYER_STATE)
+
+topstates <- io %>% group_by(EMPLOYER_STATE) %>%
+    summarise(count = n()) %>%
+    arrange(desc(count)) %>%
+    top_n(15, wt = count)
+
+
+ggplot(data = topstates, aes(x = reorder(EMPLOYER_STATE,count),
+    y = count, fill =EMPLOYER_STATE)) +
+    geom_bar(stat = "identity") + 
+    labs(x = "STATE", y = "Number of Petitions",
+    title = "TOP Work Locations (in terms of petitions made)") +
+    theme(legend.position = "none") +
+    scale_y_continuous(breaks = seq(0,120000,15000)) +
+    coord_flip()
+```
+
+
+
+#### Application by City
+
+
+
+Plano and New York have the most applications.
+
+```{r}
+io$EMPLOYER_CITY2 <- factor(io$EMPLOYER_CITY)
+
+topcity <- io %>% group_by(EMPLOYER_CITY) %>%
+    summarise(count = n()) %>%
+    arrange(desc(count)) %>%
+    top_n(15, wt = count)
+ggplot(data = topcity, aes(x = reorder(EMPLOYER_CITY,count),
+    y = count, fill =EMPLOYER_CITY)) +
+    geom_bar(stat = "identity") + 
+    labs(x = "CITY", y = "Number of Petitions",
+    title = "TOP Work Locations (in terms of petitions made)") +
+    theme(legend.position = "none") +
+    scale_y_continuous(breaks = seq(0,120000,15000)) +
+    coord_flip()
+```
+
+
+
+
+
+
+#### STATE wise Pay range
+
+
+
+This graph suggests that many people have written their salaries as zero in the application.
+
+It also suggests that more people are under 100K range that was specified in hypothesis.
+
+```{r}
+ggplot(data = subset(io, io$PREVAILING_WAGE < quantile(io$PREVAILING_WAGE, 0.99, na.rm = T)),
+       aes(x = PREVAILING_WAGE/1000)) +
+    geom_histogram(color = "black", fill = "light blue", binwidth = 2.5) +
+    scale_x_continuous(breaks = seq(0,150,25)) +
+    scale_y_continuous(breaks = seq(0,500000,25000)) +
+    labs(x = "Salary (in thousand USD)", y = "Number of petitions")
+```
+
+
+
+#### YEAR and CASE STATUS
+
+
+
+
+```{r}
+year1 <- ggplot(data = io %>% filter((!is.na(YEAR)) & 
+        (io$CASE_STATUS == "CERTIFIED-WITHDRAWN" | io$CASE_STATUS == "WITHDRAWN" |
+        io$CASE_STATUS == "DENIED") ) %>% 
+        group_by(YEAR, CASE_STATUS) %>% summarise(count = n()),
+        aes(x = as.numeric(as.character(YEAR)), y = count/1000)) + 
+        geom_line(linejoin = "round", lineend = "round", aes(color = CASE_STATUS)) +
+        geom_point() +
+        coord_cartesian(ylim = c(0,50)) +
+        scale_color_manual(values = c("#59C3C3", "#FC0402","#FFC145")) +
+        scale_y_continuous(breaks = seq(0,50, 5)) +
+        labs(title = "Petition and Case Status trend with time", x = "YEAR",
+        y = "Number of petitions(in thousands)")
+
+year2 <- ggplot(data = io %>% filter((!is.na(YEAR)) &
+         (io$CASE_STATUS == "CERTIFIED")) %>%
+         group_by(YEAR, CASE_STATUS) %>% summarise(count = n()),
+         aes(x = as.numeric(as.character(YEAR)), y = count/1000)) +
+         geom_line(linejoin = "round", lineend = "round", aes(color = CASE_STATUS)) +
+         geom_point() +
+         coord_cartesian(ylim = c(300,600)) +
+         scale_color_manual(values = c("#43B21E")) +
+         scale_y_continuous(breaks = seq(0,650, 50)) +
+         labs(title = "Petition and Case Status trend with time", x = "YEAR",
+         y = "Number of petitions(in thousands)")
+
+grid.arrange(year2,year1, nrow = 2)
+```
+
+#### Case Study Analysis
+
+
+Here, we can say that our hypothesis was wrong in :
+
+* H1-B visas are less granted in recent years
+
+* Minimum pay of 100K USD annually
